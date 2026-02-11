@@ -1,5 +1,5 @@
 # Stage 1: Build
-FROM rust:latest as builder
+FROM rust:1.83-bookworm AS builder
 WORKDIR /app
 COPY Cargo.toml ./
 COPY crates ./crates
@@ -11,6 +11,8 @@ FROM debian:bookworm
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
+    libgcc-s1 \
+    libstdc++6 \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/target/release/gateway /usr/local/bin/
 CMD ["gateway"]
