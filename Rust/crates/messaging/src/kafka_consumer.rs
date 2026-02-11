@@ -25,8 +25,6 @@ impl KafkaConsumer {
     where
         F: FnMut(String, String) -> Result<()>,
     {
-        use rdkafka::consumer::StreamConsumer;
-
         loop {
             match self.consumer.recv().await {
                 Ok(message) => {

@@ -184,8 +184,8 @@ pub struct StripeWebhook {
 
 pub async fn stripe_webhook(
     pool: web::Data<MySqlPool>,
-    producer: web::Data<KafkaProducer>,
-    req: HttpRequest,
+    _producer: web::Data<KafkaProducer>,
+    _req: HttpRequest,
     payload: web::Json<StripeWebhook>,
 ) -> impl Responder {
     tracing::info!("Received Stripe webhook: {}", payload.event_type);
