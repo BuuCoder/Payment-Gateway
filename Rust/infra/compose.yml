@@ -32,6 +32,21 @@ services:
       timeout: 10s
       retries: 5
 
+  init-kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: [ '/bin/sh', '-c' ]
+    command: |
+      "
+      # Create payment-events topic
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic payment-events --replication-factor 1 --partitions 3
+      
+      echo 'Kafka topic payment-events created successfully!'
+      "
+    restart: "no"
+
   auth-service:
     build:
       context: ..
