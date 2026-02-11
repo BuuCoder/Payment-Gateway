@@ -1,0 +1,93 @@
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  auth-service:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.auth
+    ports:
+      - "8081:8081"
+    env_file:
+      - ../.env
+    environment:
+      - SERVICE_NAME=auth-service
+      - SERVER_PORT=8081
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  core-service:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.core
+    ports:
+      - "8082:8082"
+    env_file:
+      - ../.env
+    environment:
+      - SERVICE_NAME=core-service
+      - SERVER_PORT=8082
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  gateway:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.gateway
+    ports:
+      - "8083:8083"
+    env_file:
+      - ../.env
+    environment:
+      - SERVICE_NAME=gateway
+      - SERVER_PORT=8083
+      - AUTH_SERVICE_URL=http://auth-service:8081
+      - CORE_SERVICE_URL=http://core-service:8082
+      - KAFKA_BROKERS=kafka:29092
+    depends_on:
+      kafka:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+      core-service:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  worker-service:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.worker
+    env_file:
+      - ../.env
+    environment:
+      - SERVICE_NAME=worker-service
+      - KAFKA_BROKERS=kafka:29092
+    depends_on:
+      kafka:
+        condition: service_healthy

@@ -1,0 +1,16 @@
+# Stage 1: Build
+FROM rust:latest as builder
+WORKDIR /app
+COPY Cargo.toml ./
+COPY crates ./crates
+COPY services ./services
+RUN cargo build --release -p auth-service
+
+# Stage 2: Runtime
+FROM debian:bookworm
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /app/target/release/auth-service /usr/local/bin/
+CMD ["auth-service"]
