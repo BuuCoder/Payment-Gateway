@@ -1,4 +1,5 @@
-use sqlx::{MySqlPool, Result};
+use anyhow::Result;
+use sqlx::MySqlPool;
 use crate::domain::user::User;
 
 #[derive(Clone)]
@@ -12,15 +13,17 @@ impl UserRepository {
     }
 
     pub async fn find_all(&self) -> Result<Vec<User>> {
-        sqlx::query_as::<_, User>("SELECT id, name, email FROM users")
+        let users = sqlx::query_as::<_, User>("SELECT id, name, email FROM users")
             .fetch_all(&self.pool)
-            .await
+            .await?;
+        Ok(users)
     }
 
     pub async fn find_by_id(&self, id: i32) -> Result<User> {
-        sqlx::query_as::<_, User>("SELECT id, name, email FROM users WHERE id = ?")
+        let user = sqlx::query_as::<_, User>("SELECT id, name, email FROM users WHERE id = ?")
             .bind(id)
             .fetch_one(&self.pool)
-            .await
+            .await?;
+        Ok(user)
     }
 }

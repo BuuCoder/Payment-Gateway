@@ -2,11 +2,16 @@ mod routes;
 mod middleware;
 mod clients;
 mod handlers;
+mod domain;
+mod repo;
+mod service;
 
 use actix_web::{web, App, HttpServer};
 use std::env;
 use messaging::kafka_producer::KafkaProducer;
 use clients::StripeClient;
+use repo::PaymentRepository;
+use service::PaymentService;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -28,6 +33,10 @@ async fn main() -> std::io::Result<()> {
     // Create Stripe client
     let stripe_client = StripeClient::new(stripe_api_key);
     
+    // Initialize layers
+    let payment_repo = PaymentRepository::new(pool.clone());
+    let payment_service = PaymentService::new(payment_repo, stripe_client.clone(), producer.clone());
+    
     let server_address = env::var("SERVER_HOST")
         .unwrap_or_else(|_| "0.0.0.0".to_string())
         + ":"
@@ -40,6 +49,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(pool.clone()))
             .app_data(web::Data::new(producer.clone()))
             .app_data(web::Data::new(stripe_client.clone()))
+            .app_data(web::Data::new(payment_service.clone()))
             .configure(routes::configure)
     })
     .bind(&server_address)?

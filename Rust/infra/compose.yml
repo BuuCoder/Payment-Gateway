@@ -79,8 +79,6 @@ services:
     build:
       context: ..
       dockerfile: infra/Dockerfile.gateway
-    ports:
-      - "8083:8083"
     env_file:
       - ../.env
     environment:
@@ -98,6 +96,20 @@ services:
         condition: service_started
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # No ports exposed - accessed via HAProxy
+
+  haproxy:
+    image: haproxy:2.9-alpine
+    ports:
+      - "8080:8080"    # Load balanced endpoint
+      - "8003:8003"    # Direct access to gateway-1
+      - "8004:8004"    # Direct access to gateway-2
+      - "8404:8404"    # HAProxy stats page
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - gateway
+    restart: unless-stopped
 
   worker-service:
     build:

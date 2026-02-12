@@ -8,6 +8,7 @@ common = { path = "../../crates/common" }
 contracts = { path = "../../crates/contracts" }
 messaging = { path = "../../crates/messaging" }
 db = { path = "../../crates/db" }
+authz = { path = "../../crates/authz" }
 
 actix-web = { workspace = true }
 tokio = { workspace = true }
