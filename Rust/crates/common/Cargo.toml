@@ -12,3 +12,4 @@ tracing = { workspace = true }
 config = { workspace = true }
 chrono = { workspace = true }
 reqwest = { workspace = true }
+redis = { workspace = true }

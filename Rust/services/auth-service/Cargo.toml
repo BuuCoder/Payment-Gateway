@@ -19,3 +19,4 @@ bcrypt = "0.15"
 jsonwebtoken = "9.3"
 chrono = { workspace = true }
 anyhow = { workspace = true }
+futures-util = "0.3"
