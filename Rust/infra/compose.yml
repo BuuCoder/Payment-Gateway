@@ -75,14 +75,15 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
-  gateway:
+  gateway-1:
     build:
       context: ..
       dockerfile: infra/Dockerfile.gateway
+    image: infra-gateway:latest
     env_file:
       - ../.env
     environment:
-      - SERVICE_NAME=gateway
+      - SERVICE_NAME=gateway-1
       - SERVER_PORT=8083
       - AUTH_SERVICE_URL=http://auth-service:8081
       - CORE_SERVICE_URL=http://core-service:8082
@@ -96,19 +97,64 @@ services:
         condition: service_started
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    # No ports exposed - accessed via HAProxy
+
+  gateway-2:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.gateway
+    image: infra-gateway:latest
+    env_file:
+      - ../.env
+    environment:
+      - SERVICE_NAME=gateway-2
+      - SERVER_PORT=8083
+      - AUTH_SERVICE_URL=http://auth-service:8081
+      - CORE_SERVICE_URL=http://core-service:8082
+      - KAFKA_BROKERS=kafka:29092
+    depends_on:
+      kafka:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+      core-service:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  gateway-3:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.gateway
+    image: infra-gateway:latest
+    env_file:
+      - ../.env
+    environment:
+      - SERVICE_NAME=gateway-3
+      - SERVER_PORT=8083
+      - AUTH_SERVICE_URL=http://auth-service:8081
+      - CORE_SERVICE_URL=http://core-service:8082
+      - KAFKA_BROKERS=kafka:29092
+    depends_on:
+      kafka:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+      core-service:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   haproxy:
     image: haproxy:2.9-alpine
     ports:
       - "8080:8080"    # Load balanced endpoint
-      - "8003:8003"    # Direct access to gateway-1
-      - "8004:8004"    # Direct access to gateway-2
       - "8404:8404"    # HAProxy stats page
     volumes:
       - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     depends_on:
-      - gateway
+      - gateway-1
+      - gateway-2
+      - gateway-3
     restart: unless-stopped
 
   worker-service:
