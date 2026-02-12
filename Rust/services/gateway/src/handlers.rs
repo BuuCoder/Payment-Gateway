@@ -17,6 +17,7 @@ pub struct CreatePaymentRequest {
     pub user_id: i32,
     pub amount: f64,
     pub currency: Option<String>,
+    pub payment_method: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -54,6 +55,7 @@ pub async fn create_payment(
     request: web::Json<CreatePaymentRequest>,
 ) -> impl Responder {
     let currency = request.currency.clone().unwrap_or_else(|| "USD".to_string());
+    let payment_method = request.payment_method.clone().unwrap_or_else(|| "card".to_string());
     let amount_cents = (request.amount * 100.0) as i64;
 
     // Create payment intent with Stripe
@@ -69,13 +71,14 @@ pub async fn create_payment(
 
     // Insert payment into database
     let result = sqlx::query(
-        "INSERT INTO payments (user_id, amount, currency, status, stripe_payment_intent_id, stripe_client_secret) 
-         VALUES (?, ?, ?, ?, ?, ?)"
+        "INSERT INTO payments (user_id, amount, currency, status, payment_method, stripe_payment_intent_id, stripe_client_secret) 
+         VALUES (?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(request.user_id)
     .bind(request.amount)
     .bind(&currency)
     .bind("pending")
+    .bind(&payment_method)
     .bind(&payment_intent.id)
     .bind(&payment_intent.client_secret)
     .execute(pool.get_ref())

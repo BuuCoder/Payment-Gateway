@@ -30,7 +30,7 @@ SET time_zone = "+00:00";
 CREATE TABLE `payments` (
   `id` int(11) NOT NULL,
   `user_id` int(11) NOT NULL,
-  `amount` decimal(10,2) NOT NULL,
+  `amount` double NOT NULL,
   `currency` varchar(3) NOT NULL DEFAULT 'USD',
   `status` varchar(50) NOT NULL DEFAULT 'pending',
   `payment_method` varchar(50) DEFAULT NULL,
@@ -50,20 +50,10 @@ CREATE TABLE `users` (
   `id` int(11) NOT NULL,
   `name` varchar(255) NOT NULL,
   `email` varchar(255) NOT NULL,
+  `password` varchar(255) NOT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
---
--- Đang đổ dữ liệu cho bảng `users`
---
-
-INSERT INTO `users` (`id`, `name`, `email`, `created_at`, `updated_at`) VALUES
-(1, 'John Doe', 'john@example.com', '2026-02-11 10:23:32', '2026-02-11 10:23:32'),
-(2, 'Jane Smith', 'jane@example.com', '2026-02-11 10:23:32', '2026-02-11 10:23:32'),
-(3, 'Bob Wilson', 'bob@example.com', '2026-02-11 10:23:32', '2026-02-11 10:23:32'),
-(4, 'Alice Brown', 'alice@example.com', '2026-02-11 10:23:32', '2026-02-11 10:23:32'),
-(5, 'Charlie Davis', 'charlie@example.com', '2026-02-11 10:23:32', '2026-02-11 10:23:32');
 
 --
 -- Chỉ mục cho các bảng đã đổ

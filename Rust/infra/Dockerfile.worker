@@ -1,6 +1,20 @@
-# Stage 1: Build
-FROM rust:1.83-bookworm AS builder
+# Stage 1: Prepare recipe
+FROM lukemathwalker/cargo-chef:latest-rust-1.88-bookworm AS chef
 WORKDIR /app
+
+# Stage 2: Compute recipe
+FROM chef AS planner
+COPY Cargo.toml ./
+COPY crates ./crates
+COPY services ./services
+RUN cargo chef prepare --recipe-path recipe.json
+
+# Stage 3: Build dependencies (cached layer)
+FROM chef AS builder
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
+
+# Stage 4: Build application
 COPY Cargo.toml ./
 COPY crates ./crates
 COPY services ./services
