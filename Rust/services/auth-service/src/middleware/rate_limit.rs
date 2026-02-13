@@ -128,6 +128,17 @@ where
     forward_ready!(service);
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
+        let path = req.path().to_string();
+        
+        // Skip rate limiting for health check endpoints
+        if path == "/health" || path == "/health/" {
+            let fut = self.service.call(req);
+            return Box::pin(async move {
+                let res = fut.await?;
+                Ok(res.map_into_left_body())
+            });
+        }
+        
         // Priority 1: X-Real-IP header (from trusted backend with API key)
         // Priority 2: X-Forwarded-For header (first IP in chain)
         // Priority 3: Connection IP
@@ -187,7 +198,7 @@ where
                         "remaining": bucket.tokens.floor()
                     }));
                 
-                let _ = redis_cache.set(&key, &bucket, 3600);
+                let _ = redis_cache.set(&key, &bucket, 180);
                 
                 return Ok(ServiceResponse::new(
                     fut.await?.request().clone(),
@@ -196,7 +207,7 @@ where
             }
 
             // Save bucket state
-            if let Err(e) = redis_cache.set(&key, &bucket, 3600) {
+            if let Err(e) = redis_cache.set(&key, &bucket, 180) {
                 tracing::error!("Failed to save token bucket: {}", e);
             }
 

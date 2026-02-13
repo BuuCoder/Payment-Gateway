@@ -119,6 +119,12 @@ services:
         condition: service_started
       core-service:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8083/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -144,6 +150,12 @@ services:
         condition: service_started
       core-service:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8083/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -169,6 +181,12 @@ services:
         condition: service_started
       core-service:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8083/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
