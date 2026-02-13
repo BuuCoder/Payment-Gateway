@@ -4,7 +4,7 @@ use sqlx::{MySqlPool, Row};
 
 #[derive(Clone)]
 pub struct MessageRepository {
-    pool: MySqlPool,
+    pub pool: MySqlPool,
 }
 
 impl MessageRepository {
@@ -81,6 +81,68 @@ impl MessageRepository {
                 metadata: row.get("metadata"),
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
+            })
+            .collect();
+
+        Ok(messages)
+    }
+
+    pub async fn get_room_messages_with_users(
+        &self,
+        room_id: &str,
+        limit: i64,
+        before_id: Option<&str>,
+    ) -> Result<Vec<(Message, Option<String>)>> {
+        let messages = if let Some(before_id) = before_id {
+            sqlx::query(
+                r#"
+                SELECT m.id, m.room_id, m.sender_id, m.content, m.message_type, m.metadata, 
+                       m.created_at, m.updated_at, u.name as sender_name
+                FROM chat_messages m
+                LEFT JOIN users u ON m.sender_id = u.id
+                WHERE m.room_id = ? AND m.id < ?
+                ORDER BY m.created_at DESC
+                LIMIT ?
+                "#
+            )
+            .bind(room_id)
+            .bind(before_id)
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            sqlx::query(
+                r#"
+                SELECT m.id, m.room_id, m.sender_id, m.content, m.message_type, m.metadata, 
+                       m.created_at, m.updated_at, u.name as sender_name
+                FROM chat_messages m
+                LEFT JOIN users u ON m.sender_id = u.id
+                WHERE m.room_id = ?
+                ORDER BY m.created_at DESC
+                LIMIT ?
+                "#
+            )
+            .bind(room_id)
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await?
+        };
+
+        let messages: Vec<(Message, Option<String>)> = messages
+            .iter()
+            .map(|row| {
+                let message = Message {
+                    id: row.get("id"),
+                    room_id: row.get("room_id"),
+                    sender_id: row.get("sender_id"),
+                    content: row.get("content"),
+                    message_type: row.get("message_type"),
+                    metadata: row.get("metadata"),
+                    created_at: row.get("created_at"),
+                    updated_at: row.get("updated_at"),
+                };
+                let sender_name: Option<String> = row.try_get("sender_name").ok();
+                (message, sender_name)
             })
             .collect();
 

@@ -7,7 +7,6 @@ mod middleware;
 
 use actix::Actor;
 use actix_web::{middleware::Logger, web, App, HttpServer};
-use actix_cors::Cors;
 use anyhow::Result;
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;

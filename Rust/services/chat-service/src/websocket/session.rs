@@ -2,6 +2,7 @@ use actix::prelude::*;
 use actix_web_actors::ws;
 use std::time::{Duration, Instant};
 use tracing::{error, info, warn};
+use sqlx;
 
 use super::messages::*;
 use super::server::ChatServer;
@@ -87,12 +88,22 @@ impl WsSession {
                                 return Err(format!("Failed to save message: {}", e));
                             }
 
+                            // Get sender name from database
+                            let sender_name = sqlx::query_scalar::<_, String>(
+                                "SELECT name FROM users WHERE id = ?"
+                            )
+                            .bind(user_id)
+                            .fetch_optional(&message_repo.pool)
+                            .await
+                            .ok()
+                            .flatten();
+
                             // Broadcast to room
                             let response = WsResponse::Message {
                                 id: message.id.clone(),
                                 room_id: room_id.clone(),
                                 sender_id: user_id,
-                                sender_name: None,
+                                sender_name,
                                 content: message.content.clone(),
                                 message_type: message.message_type.clone(),
                                 metadata: message.metadata.as_ref().and_then(|m| serde_json::from_str(m).ok()),

@@ -72,9 +72,9 @@ impl RoomRepository {
     pub async fn get_room_members(&self, room_id: &str) -> Result<Vec<RoomMember>> {
         let rows = sqlx::query(
             r#"
-            SELECT id, room_id, user_id, role, joined_at
-            FROM chat_room_members
-            WHERE room_id = ?
+            SELECT m.id, m.room_id, m.user_id, m.role, m.joined_at
+            FROM chat_room_members m
+            WHERE m.room_id = ?
             "#
         )
         .bind(room_id)
@@ -89,6 +89,39 @@ impl RoomRepository {
                 user_id: row.get("user_id"),
                 role: row.get("role"),
                 joined_at: row.get("joined_at"),
+            })
+            .collect();
+
+        Ok(members)
+    }
+
+    pub async fn get_room_members_with_users(&self, room_id: &str) -> Result<Vec<(RoomMember, Option<String>, Option<String>)>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT m.id, m.room_id, m.user_id, m.role, m.joined_at,
+                   u.name as user_name, u.email as user_email
+            FROM chat_room_members m
+            LEFT JOIN users u ON m.user_id = u.id
+            WHERE m.room_id = ?
+            "#
+        )
+        .bind(room_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let members: Vec<(RoomMember, Option<String>, Option<String>)> = rows
+            .iter()
+            .map(|row| {
+                let member = RoomMember {
+                    id: row.get("id"),
+                    room_id: row.get("room_id"),
+                    user_id: row.get("user_id"),
+                    role: row.get("role"),
+                    joined_at: row.get("joined_at"),
+                };
+                let user_name: Option<String> = row.try_get("user_name").ok();
+                let user_email: Option<String> = row.try_get("user_email").ok();
+                (member, user_name, user_email)
             })
             .collect();
 
@@ -122,6 +155,19 @@ impl RoomRepository {
             .collect();
 
         Ok(rooms)
+    }
+
+    pub async fn get_user_rooms_with_members(&self, user_id: i64) -> Result<Vec<(Room, Vec<(RoomMember, Option<String>, Option<String>)>)>> {
+        // Get all rooms for user
+        let rooms = self.get_user_rooms(user_id).await?;
+        
+        let mut result = Vec::new();
+        for room in rooms {
+            let members = self.get_room_members_with_users(&room.id).await?;
+            result.push((room, members));
+        }
+        
+        Ok(result)
     }
 
     pub async fn is_member(&self, room_id: &str, user_id: i64) -> Result<bool> {

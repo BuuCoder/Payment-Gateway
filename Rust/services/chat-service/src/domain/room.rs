@@ -48,6 +48,10 @@ pub struct RoomMemberResponse {
     pub user_id: i64,
     pub role: String,
     pub joined_at: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_email: Option<String>,
 }
 
 impl Room {

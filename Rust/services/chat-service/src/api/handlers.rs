@@ -68,13 +68,43 @@ fn get_claims(req: &HttpRequest) -> Result<Claims> {
         .ok_or_else(|| actix_web::error::ErrorUnauthorized("Unauthorized"))
 }
 
+// Helper function to extract claims from query string (for WebSocket)
+fn get_claims_from_query(req: &HttpRequest) -> Result<Claims> {
+    use authz::jwt::JwtValidator;
+    
+    // Try to get from middleware first (header Authorization)
+    if let Some(claims) = req.extensions().get::<Claims>() {
+        return Ok(claims.clone());
+    }
+    
+    // Fallback: Read token from query string
+    let query = req.query_string();
+    let token = query
+        .split('&')
+        .find(|s| s.starts_with("token="))
+        .and_then(|s| s.strip_prefix("token="))
+        .ok_or_else(|| actix_web::error::ErrorUnauthorized("No token provided"))?;
+    
+    // Decode JWT
+    let jwt_secret = std::env::var("JWT_SECRET")
+        .unwrap_or_else(|_| "RushTech@2025xAjxh".to_string());
+    
+    let validator = JwtValidator::new(jwt_secret);
+    validator.verify_token(token)
+        .map_err(|e| {
+            error!("Failed to decode token from query string: {}", e);
+            actix_web::error::ErrorUnauthorized("Invalid token")
+        })
+}
+
 // WebSocket connection handler
 pub async fn ws_handler(
     req: HttpRequest,
     stream: web::Payload,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse> {
-    let claims = get_claims(&req)?;
+    // Try to get claims from query string (for browser WebSocket)
+    let claims = get_claims_from_query(&req)?;
     info!("WebSocket connection request from user {}", claims.user_id);
 
     let session = WsSession::new(
@@ -115,7 +145,7 @@ pub async fn create_room(
         match state.room_repo.find_direct_room(user_id, other_user_id).await {
             Ok(Some(room)) => {
                 // Room already exists, return it
-                let members = state.room_repo.get_room_members(&room.id).await
+                let members_with_users = state.room_repo.get_room_members_with_users(&room.id).await
                     .map_err(|e| {
                         error!("Failed to get room members: {}", e);
                         actix_web::error::ErrorInternalServerError("Failed to get room members")
@@ -126,10 +156,12 @@ pub async fn create_room(
                     name: room.name,
                     room_type: room.room_type,
                     created_by: room.created_by,
-                    members: members.into_iter().map(|m| RoomMemberResponse {
+                    members: members_with_users.into_iter().map(|(m, user_name, user_email)| RoomMemberResponse {
                         user_id: m.user_id,
                         role: m.role,
                         joined_at: m.joined_at,
+                        user_name,
+                        user_email,
                     }).collect(),
                     created_at: room.created_at,
                 };
@@ -173,7 +205,7 @@ pub async fn create_room(
     }
 
     // Get all members
-    let members = state.room_repo.get_room_members(&room.id).await.map_err(|e| {
+    let members_with_users = state.room_repo.get_room_members_with_users(&room.id).await.map_err(|e| {
         error!("Failed to get room members: {}", e);
         actix_web::error::ErrorInternalServerError("Failed to get room members")
     })?;
@@ -183,10 +215,12 @@ pub async fn create_room(
         name: room.name,
         room_type: room.room_type,
         created_by: room.created_by,
-        members: members.into_iter().map(|m| RoomMemberResponse {
+        members: members_with_users.into_iter().map(|(m, user_name, user_email)| RoomMemberResponse {
             user_id: m.user_id,
             role: m.role,
             joined_at: m.joined_at,
+            user_name,
+            user_email,
         }).collect(),
         created_at: room.created_at,
     };
@@ -210,7 +244,7 @@ pub async fn create_direct_room(
             // Room already exists, return it
             info!("Returning existing direct room {} between users {} and {}", room.id, user_id, other_user_id);
             
-            let members = state.room_repo.get_room_members(&room.id).await
+            let members_with_users = state.room_repo.get_room_members_with_users(&room.id).await
                 .map_err(|e| {
                     error!("Failed to get room members: {}", e);
                     actix_web::error::ErrorInternalServerError("Failed to get room members")
@@ -221,10 +255,12 @@ pub async fn create_direct_room(
                 name: room.name,
                 room_type: room.room_type,
                 created_by: room.created_by,
-                members: members.into_iter().map(|m| RoomMemberResponse {
+                members: members_with_users.into_iter().map(|(m, user_name, user_email)| RoomMemberResponse {
                     user_id: m.user_id,
                     role: m.role,
                     joined_at: m.joined_at,
+                    user_name,
+                    user_email,
                 }).collect(),
                 created_at: room.created_at,
             };
@@ -263,7 +299,7 @@ pub async fn create_direct_room(
         actix_web::error::ErrorInternalServerError("Failed to add member to room")
     })?;
 
-    let members = state.room_repo.get_room_members(&room.id).await
+    let members_with_users = state.room_repo.get_room_members_with_users(&room.id).await
         .map_err(|e| {
             error!("Failed to get room members: {}", e);
             actix_web::error::ErrorInternalServerError("Failed to get room members")
@@ -274,10 +310,12 @@ pub async fn create_direct_room(
         name: room.name,
         room_type: room.room_type,
         created_by: room.created_by,
-        members: members.into_iter().map(|m| RoomMemberResponse {
+        members: members_with_users.into_iter().map(|(m, user_name, user_email)| RoomMemberResponse {
             user_id: m.user_id,
             role: m.role,
             joined_at: m.joined_at,
+            user_name,
+            user_email,
         }).collect(),
         created_at: room.created_at,
     };
@@ -294,12 +332,30 @@ pub async fn get_user_rooms(
     let claims = get_claims(&req)?;
     let user_id = claims.user_id as i64;
 
-    let rooms = state.room_repo.get_user_rooms(user_id).await.map_err(|e| {
+    let rooms_with_members = state.room_repo.get_user_rooms_with_members(user_id).await.map_err(|e| {
         error!("Failed to get user rooms: {}", e);
         actix_web::error::ErrorInternalServerError("Failed to get user rooms")
     })?;
 
-    Ok(HttpResponse::Ok().json(rooms))
+    let responses: Vec<RoomResponse> = rooms_with_members
+        .into_iter()
+        .map(|(room, members_with_users)| RoomResponse {
+            id: room.id,
+            name: room.name,
+            room_type: room.room_type,
+            created_by: room.created_by,
+            members: members_with_users.into_iter().map(|(m, user_name, user_email)| RoomMemberResponse {
+                user_id: m.user_id,
+                role: m.role,
+                joined_at: m.joined_at,
+                user_name,
+                user_email,
+            }).collect(),
+            created_at: room.created_at,
+        })
+        .collect();
+
+    Ok(HttpResponse::Ok().json(responses))
 }
 
 // Get room details
@@ -330,7 +386,7 @@ pub async fn get_room(
 
     match room {
         Some(room) => {
-            let members = state.room_repo.get_room_members(&room.id).await.map_err(|e| {
+            let members_with_users = state.room_repo.get_room_members_with_users(&room.id).await.map_err(|e| {
                 error!("Failed to get room members: {}", e);
                 actix_web::error::ErrorInternalServerError("Failed to get room members")
             })?;
@@ -340,10 +396,12 @@ pub async fn get_room(
                 name: room.name,
                 room_type: room.room_type,
                 created_by: room.created_by,
-                members: members.into_iter().map(|m| RoomMemberResponse {
+                members: members_with_users.into_iter().map(|(m, user_name, user_email)| RoomMemberResponse {
                     user_id: m.user_id,
                     role: m.role,
                     joined_at: m.joined_at,
+                    user_name,
+                    user_email,
                 }).collect(),
                 created_at: room.created_at,
             };
@@ -385,16 +443,23 @@ pub async fn get_room_messages(
     }
 
     let limit = query.limit.unwrap_or(50).min(100);
-    let messages = state
+    let messages_with_users = state
         .message_repo
-        .get_room_messages(&room_id, limit, query.before_id.as_deref())
+        .get_room_messages_with_users(&room_id, limit, query.before_id.as_deref())
         .await
         .map_err(|e| {
             error!("Failed to get messages: {}", e);
             actix_web::error::ErrorInternalServerError("Failed to get messages")
         })?;
 
-    let responses: Vec<_> = messages.into_iter().map(|m| m.to_response()).collect();
+    let responses: Vec<_> = messages_with_users
+        .into_iter()
+        .map(|(m, sender_name)| {
+            let mut response = m.to_response();
+            response.sender_name = sender_name;
+            response
+        })
+        .collect();
 
     Ok(HttpResponse::Ok().json(responses))
 }

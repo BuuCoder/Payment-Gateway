@@ -22,11 +22,13 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
             // Rate limiter: 100 requests capacity, 10 requests/second (600/minute)
             let rate_limiter = RateLimiter::new(redis_cache, 100.0, 10.0);
             
+            // WebSocket endpoint - tách riêng để tự xử lý auth từ query string
+            cfg.route("/api/ws", web::get().to(ws_handler));
+            
             cfg.service(
                 web::scope("/api")
                     .wrap(rate_limiter)
                     .wrap(AuthMiddleware::new(jwt_secret))
-                    .route("/ws", web::get().to(ws_handler))
                     .route("/rooms", web::post().to(create_room))
                     .route("/rooms/direct", web::post().to(create_direct_room))
                     .route("/rooms", web::get().to(get_user_rooms))
@@ -37,11 +39,13 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
         Err(e) => {
             eprintln!("Warning: Failed to create Redis cache for rate limiting: {}. Rate limiting disabled.", e);
             
+            // WebSocket endpoint - tách riêng để tự xử lý auth từ query string
+            cfg.route("/api/ws", web::get().to(ws_handler));
+            
             // Configure routes without rate limiting
             cfg.service(
                 web::scope("/api")
                     .wrap(AuthMiddleware::new(jwt_secret))
-                    .route("/ws", web::get().to(ws_handler))
                     .route("/rooms", web::post().to(create_room))
                     .route("/rooms/direct", web::post().to(create_direct_room))
                     .route("/rooms", web::get().to(get_user_rooms))
