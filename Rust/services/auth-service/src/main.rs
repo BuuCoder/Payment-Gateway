@@ -5,6 +5,7 @@ mod service;
 mod middleware;
 
 use actix_web::{web, App, HttpServer};
+use actix_cors::Cors;
 use common::config::AppConfig;
 use common::cache::RedisCache;
 use repo::UserRepository;

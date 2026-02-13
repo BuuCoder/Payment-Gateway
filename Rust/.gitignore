@@ -28,3 +28,4 @@ Thumbs.db
 
 # Docker volumes
 .docker/
+.debug/

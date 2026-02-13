@@ -7,6 +7,7 @@ mod repo;
 mod service;
 
 use actix_web::{web, App, HttpServer};
+use actix_cors::Cors;
 use std::env;
 use messaging::kafka_producer::KafkaProducer;
 use clients::StripeClient;

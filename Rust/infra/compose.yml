@@ -193,7 +193,8 @@ services:
   haproxy:
     image: haproxy:2.9-alpine
     ports:
-      - "8080:8080"    # Load balanced endpoint
+      - "8080:8080"    # Load balanced gateway endpoint
+      - "8085:8085"    # Load balanced chat WebSocket endpoint
       - "8404:8404"    # HAProxy stats page
     volumes:
       - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
@@ -201,6 +202,9 @@ services:
       - gateway-1
       - gateway-2
       - gateway-3
+      - chat-service-1
+      - chat-service-2
+      - chat-service-3
     restart: unless-stopped
 
   worker-service:
@@ -215,6 +219,72 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+
+  chat-service-1:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.chat
+    image: infra-chat:latest
+    env_file:
+      - ../.env
+    environment:
+      - SERVICE_NAME=chat-service-1
+      - SERVER_PORT=8084
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://127.0.0.1:8084/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  chat-service-2:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.chat
+    image: infra-chat:latest
+    env_file:
+      - ../.env
+    environment:
+      - SERVICE_NAME=chat-service-2
+      - SERVER_PORT=8084
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://127.0.0.1:8084/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  chat-service-3:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.chat
+    image: infra-chat:latest
+    env_file:
+      - ../.env
+    environment:
+      - SERVICE_NAME=chat-service-3
+      - SERVER_PORT=8084
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "-O", "/dev/null", "http://127.0.0.1:8084/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 volumes:
   redis-data:

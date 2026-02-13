@@ -4,6 +4,7 @@ mod repo;
 mod service;
 
 use actix_web::{web, App, HttpServer};
+use actix_cors::Cors;
 use common::config::AppConfig;
 use repo::user_repo::UserRepository;
 use service::user_service::UserService;

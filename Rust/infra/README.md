@@ -1,205 +1,387 @@
-# Infrastructure - Docker Build Guide
+# Infrastructure & Deployment
 
-## Tổng quan
+## Quick Start
 
-Thư mục này chứa các Dockerfile và docker-compose configuration để build và deploy các microservices.
+### Development (Single Instance)
 
-## Cargo Chef - Tối ưu Build Time
+```bash
+# Start single chat service for development
+docker-compose -f compose.yml -f compose.dev.yml up -d chat-service-dev redis
 
-Tất cả Dockerfiles đã được tích hợp **cargo-chef** để tối ưu thời gian build:
+# Access
+# - WebSocket: ws://localhost:8084/api/ws
+# - Health: http://localhost:8084/api/health
+# - Redis GUI: http://localhost:8081
+```
 
-- **Build lần đầu**: ~10 phút (build dependencies + code)
-- **Build lần sau (chỉ sửa code)**: ~30 giây - 1 phút (chỉ rebuild code)
-- **Build lần sau (thêm/sửa dependencies)**: ~5-7 phút (rebuild dependencies)
+### Production (Load Balanced)
 
-### Cách hoạt động của Cargo Chef
+```bash
+# Deploy with load balancing
+./deploy-chat.sh
 
-1. Tạo "recipe" từ Cargo.toml (chứa thông tin dependencies)
-2. Build dependencies dựa trên recipe → **layer này được cache**
-3. Copy source code và build application
+# Access
+# - WebSocket: ws://localhost:8085/api/ws (load balanced)
+# - HAProxy Stats: http://localhost:8404
+```
 
-Khi bạn chỉ sửa code trong `services/` hoặc `crates/`, Docker sẽ reuse cached dependencies và chỉ rebuild phần code thay đổi.
+## Architecture
+
+### Development
+```
+Client → chat-service-dev:8084 → Redis
+```
+
+### Production
+```
+Client → HAProxy:8085 → [chat-service-1, chat-service-2, chat-service-3] → Redis Pub/Sub
+```
 
 ## Services
 
-- **gateway**: API Gateway (port 8080)
-- **auth-service**: Authentication service (port 8081)
-- **core-service**: Core business logic (port 8082)
-- **worker-service**: Background worker xử lý Kafka events
+| Service | Port | Description |
+|---------|------|-------------|
+| HAProxy | 8080 | Gateway load balancer |
+| HAProxy | 8085 | Chat WebSocket load balancer |
+| HAProxy | 8404 | HAProxy statistics |
+| Gateway | 8083 | Payment gateway (internal) |
+| Auth | 8081 | Authentication service |
+| Core | 8082 | Core service |
+| Chat | 8084 | Chat service (internal) |
+| Redis | 6379 | Cache & Pub/Sub |
+| Redis Insight | 5540 | Redis GUI |
+| Kafka | 9092 | Message broker |
+| Zookeeper | 2181 | Kafka coordination |
 
-## Build Commands
+## Commands
 
-### Build tất cả services
-
-```bash
-cd Rust
-docker compose -f infra/compose.yml build
-```
-
-### Build một service cụ thể
-
-```bash
-# Build gateway
-docker compose -f infra/compose.yml build gateway
-
-# Build auth-service
-docker compose -f infra/compose.yml build auth-service
-
-# Build core-service
-docker compose -f infra/compose.yml build core-service
-
-# Build worker-service
-docker compose -f infra/compose.yml build worker-service
-```
-
-### Build với no-cache (force rebuild toàn bộ)
+### Build
 
 ```bash
-docker compose -f infra/compose.yml build --no-cache
+# Build all services
+docker-compose build
+
+# Build specific service
+docker-compose build chat-service-1
+
+# Build without cache
+docker-compose build --no-cache chat-service-1
 ```
 
-## Run Services
-
-### Start tất cả services
+### Start/Stop
 
 ```bash
-docker compose -f infra/compose.yml up -d
+# Start all services
+docker-compose up -d
+
+# Start specific services
+docker-compose up -d redis chat-service-1
+
+# Stop all services
+docker-compose down
+
+# Stop and remove volumes
+docker-compose down -v
 ```
 
-### Start một service cụ thể
+### Logs
 
 ```bash
-docker compose -f infra/compose.yml up -d gateway
+# View all logs
+docker-compose logs -f
+
+# View specific service
+docker-compose logs -f chat-service-1
+
+# View multiple services
+docker-compose logs -f chat-service-1 chat-service-2
+
+# Last 100 lines
+docker-compose logs --tail=100 chat-service-1
 ```
 
-### Stop services
+### Health Checks
 
 ```bash
-docker compose -f infra/compose.yml down
+# Check all services
+docker-compose ps
+
+# Check specific service health
+curl http://localhost:8084/api/health
+
+# Check through load balancer
+curl http://localhost:8085/api/health
 ```
 
-### Restart một service
+### Scaling
 
 ```bash
-docker compose -f infra/compose.yml restart gateway
+# Scale chat service
+docker-compose up -d --scale chat-service-1=5
+
+# Note: Need to update HAProxy config for new instances
 ```
 
-## Logs & Monitoring
-
-### Xem logs tất cả services
+### Restart
 
 ```bash
-docker compose -f infra/compose.yml logs -f
+# Restart all services
+docker-compose restart
+
+# Restart specific service
+docker-compose restart chat-service-1
+
+# Rolling restart (zero downtime)
+docker-compose restart chat-service-1 && sleep 10 && \
+docker-compose restart chat-service-2 && sleep 10 && \
+docker-compose restart chat-service-3
 ```
 
-### Xem logs một service cụ thể
+### Execute Commands
 
 ```bash
-docker compose -f infra/compose.yml logs -f gateway
+# Execute command in container
+docker-compose exec chat-service-1 sh
+
+# Run one-off command
+docker-compose run --rm chat-service-1 cargo test
 ```
 
-### Kiểm tra trạng thái services
+## Configuration Files
+
+- `compose.yml` - Main production configuration
+- `compose.dev.yml` - Development overrides
+- `haproxy.cfg` - HAProxy load balancer configuration
+- `Dockerfile.*` - Service-specific Dockerfiles
+
+## Environment Variables
+
+Create `.env` file in project root:
+
+```env
+# Database
+DATABASE_URL=mysql://root@host.docker.internal:3306/rustdb
+
+# Redis
+REDIS_URL=redis://redis:6379
+
+# Kafka
+KAFKA_BROKERS=kafka:29092
+
+# Services
+AUTH_SERVICE_URL=http://auth-service:8081
+CORE_SERVICE_URL=http://core-service:8082
+
+# Logging
+LOG_LEVEL=info
+RUST_LOG=info
+
+# API Keys
+AUTH_API_KEYS=your-secure-api-key
+```
+
+## Networking
+
+All services run in the same Docker network:
 
 ```bash
-docker compose -f infra/compose.yml ps
+# List networks
+docker network ls
+
+# Inspect network
+docker network inspect infra_default
+
+# Connect to network
+docker network connect infra_default my-container
 ```
 
-## Development Workflow
+## Volumes
 
-### Khi sửa code (không thay đổi dependencies)
+Persistent data volumes:
+
+- `redis-data` - Redis persistence
+- `kafka-data` - Kafka logs
+- `zookeeper-data` - Zookeeper data
 
 ```bash
-# 1. Sửa code trong services/ hoặc crates/
-# 2. Build lại service (chỉ mất ~30 giây)
-docker compose -f infra/compose.yml build gateway
+# List volumes
+docker volume ls
 
-# 3. Restart service
-docker compose -f infra/compose.yml up -d gateway
+# Inspect volume
+docker volume inspect infra_redis-data
 
-# 4. Xem logs
-docker compose -f infra/compose.yml logs -f gateway
+# Remove unused volumes
+docker volume prune
 ```
-
-### Khi thêm/sửa dependencies trong Cargo.toml
-
-```bash
-# 1. Sửa Cargo.toml
-# 2. Build lại (mất ~5-7 phút)
-docker compose -f infra/compose.yml build gateway
-
-# 3. Restart service
-docker compose -f infra/compose.yml up -d gateway
-```
-
-## Dockerfile Structure
-
-Mỗi Dockerfile sử dụng multi-stage build với cargo-chef:
-
-```dockerfile
-# Stage 1: Prepare recipe
-FROM lukemathwalker/cargo-chef:latest-rust-1.88-bookworm AS chef
-
-# Stage 2: Compute recipe (dependencies info)
-FROM chef AS planner
-COPY Cargo.toml ./
-COPY crates ./crates
-COPY services ./services
-RUN cargo chef prepare --recipe-path recipe.json
-
-# Stage 3: Build dependencies (CACHED LAYER)
-FROM chef AS builder
-COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json
-
-# Stage 4: Build application
-COPY Cargo.toml ./
-COPY crates ./crates
-COPY services ./services
-RUN cargo build --release -p <service-name>
-
-# Stage 5: Runtime (minimal image)
-FROM debian:bookworm
-COPY --from=builder /app/target/release/<service-name> /usr/local/bin/
-CMD ["<service-name>"]
-```
-
-## Rust Version
-
-Tất cả services sử dụng **Rust 1.88** để đảm bảo:
-- Reproducible builds
-- Tương thích với dependencies yêu cầu edition 2024
-- Consistency across team
 
 ## Troubleshooting
 
-### Build bị lỗi "failed to compile cargo-chef"
-
-Đã fix bằng cách sử dụng pre-built cargo-chef image thay vì compile từ source.
-
-### Lỗi "edition2024 is required"
-
-Đã fix bằng cách upgrade Rust lên version 1.88.
-
-### Build vẫn chậm sau lần đầu
-
-Kiểm tra xem có thay đổi Cargo.toml không. Nếu có, dependencies layer sẽ rebuild.
-
-### Service không start
+### Service won't start
 
 ```bash
-# Xem logs để debug
-docker compose -f infra/compose.yml logs <service-name>
+# Check logs
+docker-compose logs chat-service-1
 
-# Kiểm tra container status
-docker compose -f infra/compose.yml ps
+# Check if port is in use
+netstat -an | grep 8084
+
+# Restart service
+docker-compose restart chat-service-1
 ```
 
-## Tips
+### Can't connect to database
 
-- Luôn build từ thư mục `Rust/` (workspace root)
-- Sử dụng `-f infra/compose.yml` để chỉ định compose file
-- Thêm `-d` flag để chạy services ở background
-- Sử dụng `--build` flag khi up để tự động rebuild nếu có thay đổi:
-  ```bash
-  docker compose -f infra/compose.yml up -d --build
-  ```
+```bash
+# Check database connectivity
+docker-compose exec chat-service-1 ping host.docker.internal
+
+# Check environment variables
+docker-compose exec chat-service-1 env | grep DATABASE
+```
+
+### Redis connection issues
+
+```bash
+# Check Redis is running
+docker-compose ps redis
+
+# Test Redis connection
+docker-compose exec redis redis-cli PING
+
+# Check Redis logs
+docker-compose logs redis
+```
+
+### WebSocket connection drops
+
+```bash
+# Check HAProxy stats
+open http://localhost:8404
+
+# Check service health
+curl http://localhost:8085/api/health
+
+# Check logs for errors
+docker-compose logs -f chat-service-1 | grep -i error
+```
+
+## Monitoring
+
+### HAProxy Stats
+
+Access: http://localhost:8404
+
+Shows:
+- Active connections
+- Request rate
+- Health status
+- Response times
+
+### Redis Insight
+
+Access: http://localhost:5540
+
+Features:
+- Key browser
+- CLI
+- Pub/Sub monitor
+- Performance metrics
+
+### Container Stats
+
+```bash
+# Real-time stats
+docker stats
+
+# Specific containers
+docker stats chat-service-1 chat-service-2 chat-service-3
+```
+
+## Maintenance
+
+### Update Services
+
+```bash
+# Pull latest images
+docker-compose pull
+
+# Rebuild and restart
+docker-compose up -d --build
+```
+
+### Clean Up
+
+```bash
+# Remove stopped containers
+docker-compose rm
+
+# Remove unused images
+docker image prune
+
+# Remove everything
+docker-compose down -v --rmi all
+```
+
+### Backup
+
+```bash
+# Backup volumes
+docker run --rm -v infra_redis-data:/data -v $(pwd):/backup \
+  alpine tar czf /backup/redis-backup.tar.gz /data
+
+# Restore volumes
+docker run --rm -v infra_redis-data:/data -v $(pwd):/backup \
+  alpine tar xzf /backup/redis-backup.tar.gz -C /
+```
+
+## Production Deployment
+
+See [chat-docker-deployment.md](../docs/chat-docker-deployment.md) for detailed production deployment guide.
+
+## Development Workflow
+
+1. Make code changes
+2. Rebuild service: `docker-compose build chat-service-1`
+3. Restart service: `docker-compose restart chat-service-1`
+4. View logs: `docker-compose logs -f chat-service-1`
+5. Test: Open `test-client.html` in browser
+
+## CI/CD Integration
+
+Example GitHub Actions workflow:
+
+```yaml
+name: Deploy Chat Service
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Build image
+        run: |
+          cd Rust/infra
+          docker-compose build chat-service-1
+      
+      - name: Push to registry
+        run: |
+          docker tag infra-chat:latest registry.example.com/chat:latest
+          docker push registry.example.com/chat:latest
+      
+      - name: Deploy
+        run: |
+          ssh user@server 'cd /app && docker-compose pull && docker-compose up -d'
+```
+
+## Support
+
+For issues and questions:
+- Check logs: `docker-compose logs -f`
+- Check health: `curl http://localhost:8085/api/health`
+- View HAProxy stats: http://localhost:8404
+- Check documentation: `docs/chat-docker-deployment.md`

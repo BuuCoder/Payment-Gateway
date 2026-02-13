@@ -1,0 +1,58 @@
+[package]
+name = "chat-service"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Workspace dependencies
+common = { path = "../../crates/common" }
+db = { path = "../../crates/db" }
+authz = { path = "../../crates/authz" }
+messaging = { path = "../../crates/messaging" }
+contracts = { path = "../../crates/contracts" }
+
+# Web framework
+actix = "0.13"
+actix-web = { workspace = true }
+actix-web-actors = "4.2"
+tokio = { workspace = true }
+
+# Database
+sqlx = { workspace = true, features = ["chrono"] }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Config
+config = { workspace = true }
+
+# Time
+chrono = { workspace = true }
+
+# Redis
+redis = { workspace = true }
+
+# Async streams
+futures = "0.3"
+futures-util = "0.3"
+
+# Kafka
+rdkafka = { workspace = true }
+
+# UUID
+uuid = { version = "1.6", features = ["v4", "serde"] }
+
+# Random
+rand = "0.8"
+
+# JWT
+jsonwebtoken = "9.2"

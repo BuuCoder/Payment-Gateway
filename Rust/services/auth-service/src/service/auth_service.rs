@@ -23,7 +23,7 @@ pub struct AuthService {
 impl AuthService {
     pub fn new(user_repo: UserRepository) -> Self {
         let jwt_secret = std::env::var("JWT_SECRET")
-            .unwrap_or_else(|_| "your-secret-key".to_string());
+            .unwrap_or_else(|_| "RushTech@2025xAjxh".to_string());
 
         Self {
             user_repo,
