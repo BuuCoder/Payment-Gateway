@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     }
     
     // Core service endpoint: /api/v1/users
-    const response = await fetch(`${process.env.NEXT_PUBLIC_CORE_API_URL}/api/v1/users`, {
+    const response = await fetch(`${process.env.CORE_API_URL}/api/v1/users`, {
       headers: {
         'Authorization': token,
       },

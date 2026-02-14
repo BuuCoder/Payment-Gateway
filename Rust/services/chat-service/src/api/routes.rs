@@ -29,11 +29,19 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
                 web::scope("/api")
                     .wrap(rate_limiter)
                     .wrap(AuthMiddleware::new(jwt_secret))
+                    // Room endpoints
                     .route("/rooms", web::post().to(create_room))
                     .route("/rooms/direct", web::post().to(create_direct_room))
                     .route("/rooms", web::get().to(get_user_rooms))
                     .route("/rooms/{room_id}", web::get().to(get_room))
-                    .route("/rooms/{room_id}/messages", web::get().to(get_room_messages)),
+                    .route("/rooms/{room_id}/messages", web::get().to(get_room_messages))
+                    .route("/rooms/{room_id}/leave", web::post().to(leave_room))
+                    .route("/rooms/{room_id}/hide", web::post().to(hide_room))
+                    .route("/rooms/{room_id}/mark-read", web::post().to(mark_room_as_read))
+                    // Invitation endpoints
+                    .route("/invitations", web::get().to(get_invitations))
+                    .route("/invitations/{invitation_id}/accept", web::post().to(accept_invitation))
+                    .route("/invitations/{invitation_id}/decline", web::post().to(decline_invitation)),
             );
         }
         Err(e) => {
@@ -46,11 +54,19 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
             cfg.service(
                 web::scope("/api")
                     .wrap(AuthMiddleware::new(jwt_secret))
+                    // Room endpoints
                     .route("/rooms", web::post().to(create_room))
                     .route("/rooms/direct", web::post().to(create_direct_room))
                     .route("/rooms", web::get().to(get_user_rooms))
                     .route("/rooms/{room_id}", web::get().to(get_room))
-                    .route("/rooms/{room_id}/messages", web::get().to(get_room_messages)),
+                    .route("/rooms/{room_id}/messages", web::get().to(get_room_messages))
+                    .route("/rooms/{room_id}/leave", web::post().to(leave_room))
+                    .route("/rooms/{room_id}/hide", web::post().to(hide_room))
+                    .route("/rooms/{room_id}/mark-read", web::post().to(mark_room_as_read))
+                    // Invitation endpoints
+                    .route("/invitations", web::get().to(get_invitations))
+                    .route("/invitations/{invitation_id}/accept", web::post().to(accept_invitation))
+                    .route("/invitations/{invitation_id}/decline", web::post().to(decline_invitation)),
             );
         }
     }

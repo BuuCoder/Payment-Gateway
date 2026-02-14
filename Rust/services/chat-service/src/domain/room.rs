@@ -10,6 +10,8 @@ pub struct Room {
     pub created_by: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    #[sqlx(default)]
+    pub last_message_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
@@ -19,6 +21,12 @@ pub struct RoomMember {
     pub user_id: i64,
     pub role: String, // admin, member
     pub joined_at: DateTime<Utc>,
+    #[sqlx(default)]
+    pub left_at: Option<DateTime<Utc>>,
+    #[sqlx(default)]
+    pub hidden_at: Option<DateTime<Utc>>,
+    #[sqlx(default)]
+    pub last_read_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,6 +49,10 @@ pub struct RoomResponse {
     pub created_by: i64,
     pub members: Vec<RoomMemberResponse>,
     pub created_at: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_message_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unread_count: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,6 +76,7 @@ impl Room {
             created_by,
             created_at: now,
             updated_at: now,
+            last_message_at: None,
         }
     }
 }

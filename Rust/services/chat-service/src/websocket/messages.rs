@@ -47,6 +47,66 @@ pub enum WsResponse {
     Joined { room_id: String },
     #[serde(rename = "left")]
     Left { room_id: String },
+    #[serde(rename = "room_created")]
+    RoomCreated {
+        room_id: String,
+        room_name: Option<String>,
+        room_type: String,
+    },
+    #[serde(rename = "invitation_received")]
+    InvitationReceived {
+        invitation_id: i64,
+        room_id: String,
+        room_name: Option<String>,
+        invited_by: i64,
+        invited_by_name: String,
+    },
+    #[serde(rename = "member_joined")]
+    MemberJoined {
+        room_id: String,
+        user_id: i64,
+        user_name: String,
+    },
+    #[serde(rename = "member_left")]
+    MemberLeft {
+        room_id: String,
+        user_id: i64,
+        user_name: String,
+    },
+    #[serde(rename = "room_updated")]
+    RoomUpdated {
+        room_id: String,
+        last_message_at: String,
+    },
+    #[serde(rename = "unread_updated")]
+    UnreadUpdated {
+        room_id: String,
+        unread_count: i64,
+    },
+    #[serde(rename = "user_online")]
+    UserOnline {
+        user_id: i64,
+        user_name: String,
+    },
+    #[serde(rename = "user_offline")]
+    UserOffline {
+        user_id: i64,
+    },
+    #[serde(rename = "room_presence")]
+    RoomPresence {
+        room_id: String,
+        online_users: Vec<i64>,
+    },
+    #[serde(rename = "connection_replaced")]
+    ConnectionReplaced {
+        message: String,
+    },
+    #[serde(rename = "rate_limit_exceeded")]
+    RateLimitExceeded {
+        event_type: String,
+        retry_after: f64,
+        message: String,
+    },
     #[serde(rename = "error")]
     Error { message: String },
     #[serde(rename = "pong")]
@@ -65,6 +125,7 @@ pub struct Connect {
 #[rtype(result = "()")]
 pub struct Disconnect {
     pub user_id: i64,
+    pub session_id: String,
 }
 
 #[derive(Message)]
@@ -114,3 +175,27 @@ pub struct WsResponseMessage(pub WsResponse);
 #[derive(Message)]
 #[rtype(result = "usize")]
 pub struct GetConnectionCount;
+
+// Broadcast to specific users
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct BroadcastToUsers {
+    pub user_ids: Vec<i64>,
+    pub message: WsResponse,
+}
+
+// Track user typing
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct UserTyping {
+    pub user_id: i64,
+    pub room_id: String,
+}
+
+// Check rate limit
+#[derive(Message)]
+#[rtype(result = "Result<(), f64>")]
+pub struct CheckRateLimit {
+    pub user_id: i64,
+    pub event_type: String, // "message", "typing", "room_action"
+}

@@ -16,6 +16,8 @@ export interface Room {
   room_type: 'direct' | 'group';
   created_by: number;
   created_at: string;
+  last_message_at?: string;
+  unread_count?: number;
   members?: RoomMember[]; // Optional vì một số API không trả về members
 }
 
@@ -49,7 +51,9 @@ export interface WsClientMessage {
 
 // WebSocket response types - Server trả về
 export interface WsServerMessage {
-  type: 'message' | 'joined' | 'left' | 'typing' | 'error' | 'pong';
+  type: 'message' | 'joined' | 'left' | 'typing' | 'error' | 'pong' | 'room_created' | 
+        'invitation_received' | 'member_joined' | 'member_left' | 'room_updated' | 'unread_updated' |
+        'user_online' | 'user_offline' | 'room_presence';
   // For message type
   id?: string;
   room_id?: string;
@@ -63,6 +67,30 @@ export interface WsServerMessage {
   user_id?: number;
   user_name?: string | null;
   is_typing?: boolean;
+  // For room_created type
+  room_name?: string | null;
+  room_type?: string;
+  // For invitation_received type
+  invitation_id?: number;
+  invited_by?: number;
+  invited_by_name?: string;
+  // For room_updated type
+  last_message_at?: string;
+  // For unread_updated type
+  unread_count?: number;
+  // For presence types
+  online_users?: number[];
   // For error type
   message?: string;
+}
+
+export interface Invitation {
+  id: number;
+  room_id: string;
+  room_name: string | null;
+  room_type: string;
+  invited_by: number;
+  invited_by_name: string;
+  status: string;
+  created_at: string;
 }

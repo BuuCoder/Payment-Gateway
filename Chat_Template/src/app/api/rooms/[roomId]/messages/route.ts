@@ -18,7 +18,7 @@ export async function GET(
     
     console.log(`Fetching messages for room ${roomId} with token: ${token.substring(0, 20)}...`);
     
-    const url = `${process.env.NEXT_PUBLIC_CHAT_API_URL}/api/rooms/${roomId}/messages?limit=${limit}`;
+    const url = `${process.env.CHAT_SERVICE_URL}/api/rooms/${roomId}/messages?limit=${limit}`;
     console.log(`Calling: ${url}`);
     
     const response = await fetch(url, {

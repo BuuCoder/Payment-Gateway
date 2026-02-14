@@ -1,21 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-export async function POST(request: NextRequest) {
+const CHAT_SERVICE_URL = process.env.CHAT_SERVICE_URL || 'http://localhost:8084';
+
+export async function GET(request: NextRequest) {
   try {
     const token = request.headers.get('authorization');
-    const body = await request.json();
     
     if (!token) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    
-    const response = await fetch(`${process.env.CHAT_SERVICE_URL}/api/rooms/direct`, {
-      method: 'POST',
+
+    const response = await fetch(`${CHAT_SERVICE_URL}/api/invitations`, {
+      method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
         'Authorization': token,
+        'Content-Type': 'application/json',
       },
-      body: JSON.stringify(body),
     });
 
     const data = await response.json();
@@ -26,9 +26,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(data);
   } catch (error) {
-    console.error('Create direct room error:', error);
+    console.error('Error fetching invitations:', error);
     return NextResponse.json(
-      { error: 'Failed to create room' },
+      { error: 'Failed to fetch invitations' },
       { status: 500 }
     );
   }

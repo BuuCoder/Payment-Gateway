@@ -11,8 +11,8 @@ use anyhow::Result;
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
-use api::{configure_routes, AppState};
-use repo::{MessageRepository, RoomRepository};
+use api::{configure_routes, AppState, MetricsCollector};
+use repo::{MessageRepository, RoomRepository, InvitationRepository};
 use websocket::ChatServer;
 use redis_listener::RedisListener;
 
@@ -44,10 +44,15 @@ async fn main() -> Result<()> {
     let redis_conn = redis_client.get_multiplexed_tokio_connection().await?;
     let redis_conn_listener = redis_client.get_multiplexed_tokio_connection().await?;
     info!("Redis connection established");
+    
+    // Create Redis cache for app state
+    let redis_cache = common::cache::RedisCache::new(&redis_url)?;
+    info!("Redis cache created");
 
     // Initialize repositories
     let message_repo = MessageRepository::new(db_pool.clone());
     let room_repo = RoomRepository::new(db_pool.clone());
+    let invitation_repo = InvitationRepository::new(db_pool.clone());
 
     // Start chat server actor
     let chat_server = ChatServer::new(redis_conn).start();
@@ -65,6 +70,8 @@ async fn main() -> Result<()> {
         chat_server,
         message_repo,
         room_repo,
+        invitation_repo,
+        redis_cache: redis_cache.clone(),
     });
 
     info!("Starting HTTP server on port {}", server_port);

@@ -1,0 +1,99 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'rust-microservices'
+    environment: 'development'
+
+# Alertmanager configuration (optional)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ['alertmanager:9093']
+
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+
+  # Node Exporter - System metrics (CPU, RAM, Disk, Network)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          service: 'node-exporter'
+          type: 'system'
+
+  # cAdvisor - Container metrics
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+        labels:
+          service: 'cadvisor'
+          type: 'containers'
+
+  # Redis Exporter
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+        labels:
+          service: 'redis'
+          type: 'cache'
+
+  # HAProxy Stats (if exposed)
+  - job_name: 'haproxy'
+    static_configs:
+      - targets: ['haproxy:8404']
+        labels:
+          service: 'haproxy'
+          type: 'load-balancer'
+
+  # Rust Services (if they expose /metrics endpoint)
+  - job_name: 'auth-service'
+    static_configs:
+      - targets: ['auth-service:8081']
+        labels:
+          service: 'auth-service'
+          type: 'application'
+    metrics_path: '/metrics'
+
+  - job_name: 'core-service'
+    static_configs:
+      - targets: ['core-service:8082']
+        labels:
+          service: 'core-service'
+          type: 'application'
+    metrics_path: '/metrics'
+
+  - job_name: 'gateway'
+    static_configs:
+      - targets: 
+          - 'gateway-1:8083'
+          - 'gateway-2:8083'
+          - 'gateway-3:8083'
+        labels:
+          service: 'gateway'
+          type: 'application'
+    metrics_path: '/metrics'
+
+  - job_name: 'chat-service'
+    static_configs:
+      - targets:
+          - 'chat-service-1:8084'
+          - 'chat-service-2:8084'
+          - 'chat-service-3:8084'
+        labels:
+          service: 'chat-service'
+          type: 'application'
+    metrics_path: '/metrics'
+
+  - job_name: 'worker-service'
+    static_configs:
+      - targets: ['worker-service:8087']
+        labels:
+          service: 'worker-service'
+          type: 'application'
+    metrics_path: '/metrics'
