@@ -168,6 +168,7 @@ pub async fn create_room(
                     created_at: room.created_at,
                     last_message_at: room.last_message_at,
                     unread_count: None,
+                    is_hidden: None,
                 };
 
                 return Ok(HttpResponse::Ok().json(response));
@@ -277,6 +278,7 @@ pub async fn create_room(
         created_at: room.created_at,
         last_message_at: room.last_message_at,
         unread_count: None,
+        is_hidden: None,
     };
 
     // Notify all members about new room via WebSocket
@@ -342,6 +344,7 @@ pub async fn create_direct_room(
                 created_at: room.created_at,
                 last_message_at: room.last_message_at,
                 unread_count: None,
+                is_hidden: None,
             };
 
             return Ok(HttpResponse::Ok().json(response));
@@ -399,6 +402,7 @@ pub async fn create_direct_room(
         created_at: room.created_at,
         last_message_at: room.last_message_at,
         unread_count: None,
+        is_hidden: None,
     };
 
     info!("Created direct room {} between users {} and {}", room.id, user_id, other_user_id);
@@ -409,18 +413,23 @@ pub async fn create_direct_room(
 pub async fn get_user_rooms(
     req: HttpRequest,
     state: web::Data<AppState>,
+    query: web::Query<std::collections::HashMap<String, String>>,
 ) -> Result<HttpResponse> {
     let claims = get_claims(&req)?;
     let user_id = claims.user_id as i64;
+    
+    let include_hidden = query.get("include_hidden")
+        .and_then(|v| v.parse::<bool>().ok())
+        .unwrap_or(false);
 
-    let rooms_with_members = state.room_repo.get_user_rooms_with_members(user_id).await.map_err(|e| {
+    let rooms_with_members = state.room_repo.get_user_rooms_with_members(user_id, include_hidden).await.map_err(|e| {
         error!("Failed to get user rooms: {}", e);
         actix_web::error::ErrorInternalServerError("Failed to get user rooms")
     })?;
 
     let mut responses: Vec<RoomResponse> = Vec::new();
     
-    for (room, members_with_users) in rooms_with_members {
+    for (room, members_with_users, is_hidden) in rooms_with_members {
         // Calculate unread count
         let unread_count = state.room_repo.get_unread_count(&room.id, user_id).await
             .unwrap_or(0);
@@ -440,6 +449,7 @@ pub async fn get_user_rooms(
             created_at: room.created_at,
             last_message_at: room.last_message_at,
             unread_count: Some(unread_count),
+            is_hidden,
         });
     }
 
@@ -494,6 +504,7 @@ pub async fn get_room(
                 created_at: room.created_at,
                 last_message_at: room.last_message_at,
                 unread_count: None,
+                is_hidden: None,
             };
 
             Ok(HttpResponse::Ok().json(response))
@@ -669,6 +680,7 @@ pub async fn accept_invitation(
         created_at: room.created_at,
         last_message_at: room.last_message_at,
         unread_count: None,
+        is_hidden: None,
     };
 
     // Get user name

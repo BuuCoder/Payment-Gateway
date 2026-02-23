@@ -27,8 +27,10 @@ export const login = async (email: string, password: string): Promise<AuthRespon
 };
 
 // Chat APIs
-export const getUserRooms = async (): Promise<Room[]> => {
-  const { data } = await api.get<Room[]>('/rooms');
+export const getUserRooms = async (includeHidden: boolean = false): Promise<Room[]> => {
+  const { data } = await api.get<Room[]>('/rooms', {
+    params: includeHidden ? { include_hidden: true } : {}
+  });
   return data;
 };
 

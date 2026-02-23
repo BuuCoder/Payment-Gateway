@@ -135,8 +135,17 @@ impl RoomRepository {
         Ok(members)
     }
 
-    pub async fn get_user_rooms(&self, user_id: i64) -> Result<Vec<Room>> {
-        let rows = sqlx::query(
+    pub async fn get_user_rooms(&self, user_id: i64, include_hidden: bool) -> Result<Vec<Room>> {
+        let query_str = if include_hidden {
+            r#"
+            SELECT r.id, r.name, r.room_type, r.created_by, r.created_at, r.updated_at, r.last_message_at
+            FROM chat_rooms r
+            INNER JOIN chat_room_members m ON r.id = m.room_id
+            WHERE m.user_id = ? 
+              AND m.left_at IS NULL
+            ORDER BY COALESCE(r.last_message_at, r.created_at) DESC
+            "#
+        } else {
             r#"
             SELECT r.id, r.name, r.room_type, r.created_by, r.created_at, r.updated_at, r.last_message_at
             FROM chat_rooms r
@@ -146,7 +155,9 @@ impl RoomRepository {
               AND m.hidden_at IS NULL
             ORDER BY COALESCE(r.last_message_at, r.created_at) DESC
             "#
-        )
+        };
+        
+        let rows = sqlx::query(query_str)
         .bind(user_id)
         .fetch_all(&self.pool)
         .await?;
@@ -167,17 +178,66 @@ impl RoomRepository {
         Ok(rooms)
     }
 
-    pub async fn get_user_rooms_with_members(&self, user_id: i64) -> Result<Vec<(Room, Vec<(RoomMember, Option<String>, Option<String>)>)>> {
-        // Get all rooms for user
-        let rooms = self.get_user_rooms(user_id).await?;
+    pub async fn get_user_rooms_with_members(&self, user_id: i64, include_hidden: bool) -> Result<Vec<(Room, Vec<(RoomMember, Option<String>, Option<String>)>, Option<bool>)>> {
+        // Get all rooms for user with hidden status
+        let rooms_with_hidden = self.get_user_rooms_with_hidden_status(user_id, include_hidden).await?;
         
         let mut result = Vec::new();
-        for room in rooms {
+        for (room, is_hidden) in rooms_with_hidden {
             let members = self.get_room_members_with_users(&room.id).await?;
-            result.push((room, members));
+            result.push((room, members, is_hidden));
         }
         
         Ok(result)
+    }
+
+    pub async fn get_user_rooms_with_hidden_status(&self, user_id: i64, include_hidden: bool) -> Result<Vec<(Room, Option<bool>)>> {
+        let query_str = if include_hidden {
+            r#"
+            SELECT r.id, r.name, r.room_type, r.created_by, r.created_at, r.updated_at, r.last_message_at,
+                   (m.hidden_at IS NOT NULL) as is_hidden
+            FROM chat_rooms r
+            INNER JOIN chat_room_members m ON r.id = m.room_id
+            WHERE m.user_id = ? 
+              AND m.left_at IS NULL
+            ORDER BY COALESCE(r.last_message_at, r.created_at) DESC
+            "#
+        } else {
+            r#"
+            SELECT r.id, r.name, r.room_type, r.created_by, r.created_at, r.updated_at, r.last_message_at,
+                   FALSE as is_hidden
+            FROM chat_rooms r
+            INNER JOIN chat_room_members m ON r.id = m.room_id
+            WHERE m.user_id = ? 
+              AND m.left_at IS NULL 
+              AND m.hidden_at IS NULL
+            ORDER BY COALESCE(r.last_message_at, r.created_at) DESC
+            "#
+        };
+        
+        let rows = sqlx::query(query_str)
+            .bind(user_id)
+            .fetch_all(&self.pool)
+            .await?;
+
+        let rooms: Vec<(Room, Option<bool>)> = rows
+            .iter()
+            .map(|row| {
+                let room = Room {
+                    id: row.get("id"),
+                    name: row.get("name"),
+                    room_type: row.get("room_type"),
+                    created_by: row.get("created_by"),
+                    created_at: row.get("created_at"),
+                    updated_at: row.get("updated_at"),
+                    last_message_at: row.get("last_message_at"),
+                };
+                let is_hidden: bool = row.get("is_hidden");
+                (room, Some(is_hidden))
+            })
+            .collect();
+
+        Ok(rooms)
     }
 
     pub async fn is_member(&self, room_id: &str, user_id: i64) -> Result<bool> {

@@ -21,10 +21,12 @@ export default function ChatPage() {
   const [showFindFriends, setShowFindFriends] = useState(false);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showInvitations, setShowInvitations] = useState(false);
+  const [showHiddenRooms, setShowHiddenRooms] = useState(false);
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [usersMap, setUsersMap] = useState<Map<number, User>>(new Map());
   const [loading, setLoading] = useState(true);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [hiddenRooms, setHiddenRooms] = useState<Room[]>([]);
   const [connectionReplaced, setConnectionReplaced] = useState(false);
   
   // Group chat state
@@ -41,6 +43,7 @@ export default function ChatPage() {
   const userRef = useRef<User | null>(null);
   const selectedRoomRef = useRef<Room | null>(null);
   const joinedRoomsRef = useRef<Set<string>>(new Set());
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   // Sync refs với state
   useEffect(() => {
@@ -50,6 +53,11 @@ export default function ChatPage() {
   useEffect(() => {
     selectedRoomRef.current = selectedRoom;
   }, [selectedRoom]);
+
+  // Auto scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -66,7 +74,8 @@ export default function ChatPage() {
     // Load users và rooms, sau đó connect WebSocket
     const init = async () => {
       await loadUsers(currentUser);
-      const loadedRooms = await loadRooms();
+      const loadedRooms = await loadRooms(false);
+      await loadHiddenRooms();
       await loadInvitations();
       connectWebSocket(token, loadedRooms);
     };
@@ -88,11 +97,15 @@ export default function ChatPage() {
     };
   }, [router]);
 
-  const loadRooms = async () => {
+  const loadRooms = async (includeHidden: boolean = false) => {
     try {
-      const data = await getUserRooms();
+      const data = await getUserRooms(includeHidden);
+      
+      // Filter hidden rooms on client side as backup
+      const filtered = includeHidden ? data : data.filter(r => !r.is_hidden);
+      
       // Sort by last_message_at or created_at
-      const sorted = data.sort((a, b) => {
+      const sorted = filtered.sort((a, b) => {
         const aTime = new Date(a.last_message_at || a.created_at).getTime();
         const bTime = new Date(b.last_message_at || b.created_at).getTime();
         return bTime - aTime;
@@ -143,6 +156,18 @@ export default function ChatPage() {
     }
   };
 
+  const loadHiddenRooms = async () => {
+    try {
+      const data = await getUserRooms(true);
+      console.log('All rooms (including hidden):', data);
+      const hidden = data.filter(r => r.is_hidden === true);
+      console.log('Filtered hidden rooms:', hidden);
+      setHiddenRooms(hidden);
+    } catch (error) {
+      console.error('Failed to load hidden rooms:', error);
+    }
+  };
+
   const connectWebSocket = (token: string, roomsToJoin: Room[]) => {
     if (ws) {
       console.log('WebSocket already connected');
@@ -185,6 +210,12 @@ export default function ChatPage() {
           // Add to messages if viewing this room
           if (selectedRoomRef.current?.id === message.room_id) {
             setMessages(prev => {
+              // Check if message already exists (prevent duplicates)
+              const messageExists = prev.some(m => m.id === newMsg.id);
+              if (messageExists) {
+                return prev;
+              }
+              
               // Check if this is replacing a temporary message
               const hasTempMessage = prev.some(m => m.id.toString().startsWith('temp-'));
               
@@ -200,7 +231,8 @@ export default function ChatPage() {
           }
         } else if (message.type === 'room_created') {
           console.log('Room created notification received:', message);
-          loadRooms();
+          loadRooms(false);
+          loadHiddenRooms();
           
           // Auto join the new room
           if (message.room_id && !joinedRoomsRef.current.has(message.room_id)) {
@@ -217,7 +249,7 @@ export default function ChatPage() {
         } else if (message.type === 'member_joined') {
           console.log('Member joined:', message);
           // Reload rooms to get updated member count
-          loadRooms();
+          loadRooms(false);
           
           // If viewing this room, show system message
           if (selectedRoomRef.current?.id === message.room_id) {
@@ -235,7 +267,7 @@ export default function ChatPage() {
         } else if (message.type === 'member_left') {
           console.log('Member left:', message);
           // Reload rooms to get updated member count
-          loadRooms();
+          loadRooms(false);
           
           // If viewing this room, show system message
           if (selectedRoomRef.current?.id === message.room_id) {
@@ -437,7 +469,7 @@ export default function ChatPage() {
   const createDirect = async (otherUserId: number) => {
     try {
       const room = await createDirectRoom(otherUserId);
-      await loadRooms();
+      await loadRooms(false);
       setShowFindFriends(false);
       selectRoom(room);
       
@@ -463,7 +495,7 @@ export default function ChatPage() {
 
     try {
       const room = await createGroupRoom(groupName, Array.from(selectedMembers));
-      await loadRooms();
+      await loadRooms(false);
       setShowCreateGroup(false);
       setGroupName('');
       setSelectedMembers(new Set());
@@ -487,7 +519,7 @@ export default function ChatPage() {
     try {
       const result = await acceptInvitation(invitationId);
       await loadInvitations();
-      await loadRooms();
+      await loadRooms(false);
       
       // Join the room via WebSocket
       if (ws && result.room && !joinedRoomsRef.current.has(result.room.id)) {
@@ -521,7 +553,7 @@ export default function ChatPage() {
     
     try {
       await leaveRoom(roomId);
-      await loadRooms();
+      await loadRooms(false);
       
       if (selectedRoom?.id === roomId) {
         setSelectedRoom(null);
@@ -538,7 +570,10 @@ export default function ChatPage() {
   const handleHideRoom = async (roomId: string) => {
     try {
       await hideRoom(roomId);
-      await loadRooms();
+      console.log('Room hidden:', roomId);
+      
+      await loadRooms(false);
+      await loadHiddenRooms();
       
       if (selectedRoom?.id === roomId) {
         setSelectedRoom(null);
@@ -547,6 +582,21 @@ export default function ChatPage() {
     } catch (error) {
       console.error('Failed to hide room:', error);
       alert('Không thể ẩn cuộc trò chuyện');
+    }
+  };
+
+  const handleUnhideRoom = async (roomId: string) => {
+    try {
+      // Call hide API again to toggle (backend should handle toggle)
+      await hideRoom(roomId);
+      console.log('Room unhidden:', roomId);
+      
+      await loadRooms(false);
+      await loadHiddenRooms();
+      alert('Đã hiển thị lại cuộc trò chuyện');
+    } catch (error) {
+      console.error('Failed to unhide room:', error);
+      alert('Không thể hiển thị lại cuộc trò chuyện');
     }
   };
 
@@ -650,6 +700,12 @@ export default function ChatPage() {
               <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
             )}
           </button>
+          <button
+            onClick={() => setShowHiddenRooms(true)}
+            className="w-full px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 relative"
+          >
+            Đã ẩn ({hiddenRooms.length})
+          </button>
         </div>
 
         {/* Rooms List */}
@@ -679,7 +735,7 @@ export default function ChatPage() {
                     )}
                     {room.room_type === 'group' && roomPresence.get(room.id) && (
                       <span className="text-xs text-gray-500">
-                        ({roomPresence.get(room.id)?.length || 0}/{room.members.length})
+                        ({roomPresence.get(room.id)?.length || 0}/{room.members?.length || 0})
                       </span>
                     )}
                   </div>
@@ -737,15 +793,18 @@ export default function ChatPage() {
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {messages.map((msg) => {
+              {messages.map((msg, index) => {
                 const isOwn = msg.sender_id === user?.id || msg.user_id === user?.id;
                 const senderName = msg.sender_name || usersMap.get(msg.sender_id || msg.user_id)?.name || 'Unknown';
                 const isSystem = msg.sender_id === 0 || msg.sender_name === 'System';
                 
+                // Create unique key combining id and index to prevent duplicates
+                const uniqueKey = `${msg.id}-${index}`;
+                
                 // System message (centered, gray)
                 if (isSystem) {
                   return (
-                    <div key={msg.id} className="flex justify-center">
+                    <div key={uniqueKey} className="flex justify-center">
                       <div className="bg-gray-100 text-gray-600 text-sm rounded-full px-4 py-1">
                         {msg.content}
                       </div>
@@ -756,7 +815,7 @@ export default function ChatPage() {
                 // Regular user message
                 return (
                   <div
-                    key={msg.id}
+                    key={uniqueKey}
                     className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
                   >
                     <div className={`max-w-xs lg:max-w-md ${isOwn ? 'bg-indigo-600 text-white' : 'bg-white text-gray-900'} rounded-lg px-4 py-2 shadow`}>
@@ -773,6 +832,7 @@ export default function ChatPage() {
                   </div>
                 );
               })}
+              <div ref={messagesEndRef} />
             </div>
 
             {/* Typing Indicator */}
@@ -946,6 +1006,50 @@ export default function ChatPage() {
         </div>
       )}
       
+      {/* Hidden Rooms Modal */}
+      {showHiddenRooms && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-96 max-h-96 overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Cuộc trò chuyện đã ẩn</h3>
+              <button
+                onClick={() => setShowHiddenRooms(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+            {hiddenRooms.length === 0 ? (
+              <div className="text-center text-gray-500 py-4">
+                Không có cuộc trò chuyện nào bị ẩn
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {hiddenRooms.map(room => (
+                  <div key={room.id} className="border border-gray-200 rounded-lg p-3">
+                    <div className="font-medium text-gray-900 mb-1">
+                      {getRoomName(room)}
+                    </div>
+                    <div className="text-xs text-gray-500 mb-2">
+                      {room.room_type === 'direct' ? 'Trò chuyện riêng' : 'Nhóm'}
+                    </div>
+                    <button
+                      onClick={() => {
+                        handleUnhideRoom(room.id);
+                        setShowHiddenRooms(false);
+                      }}
+                      className="w-full px-3 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-sm"
+                    >
+                      Hiển thị lại
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Connection Replaced Modal */}
       {connectionReplaced && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">

@@ -18,6 +18,7 @@ export interface Room {
   created_at: string;
   last_message_at?: string;
   unread_count?: number;
+  is_hidden?: boolean;
   members?: RoomMember[]; // Optional vì một số API không trả về members
 }
 
@@ -53,7 +54,7 @@ export interface WsClientMessage {
 export interface WsServerMessage {
   type: 'message' | 'joined' | 'left' | 'typing' | 'error' | 'pong' | 'room_created' | 
         'invitation_received' | 'member_joined' | 'member_left' | 'room_updated' | 'unread_updated' |
-        'user_online' | 'user_offline' | 'room_presence';
+        'user_online' | 'user_offline' | 'room_presence' | 'connection_replaced' | 'rate_limit_exceeded';
   // For message type
   id?: string;
   room_id?: string;
@@ -80,8 +81,9 @@ export interface WsServerMessage {
   unread_count?: number;
   // For presence types
   online_users?: number[];
-  // For error type
+  // For error and rate_limit_exceeded types
   message?: string;
+  retry_after?: number;
 }
 
 export interface Invitation {
